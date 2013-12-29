@@ -13,7 +13,7 @@ Require Import Cnorm.
 Variable beta : radix.
 Variable p : Z. (* precision, also called prec in Fcore_FLX *)
 
-Hypothesis Hbeta : (beta >= 2)%Z.
+Hypothesis Hbeta : (2 <= beta)%Z.
 Hypothesis Hp : (2 <= p)%Z.
 Hypothesis Hpgt0 : (0 < p)%Z.
 (* Variable x : R. *)
@@ -432,8 +432,49 @@ apply Rplus_le_compat.
       apply Rplus_le_compat_r; try apply Rabs_pos.
       apply form2_3.
 Qed.
-      (* FRONT *)      
 
+SearchAbout ulp.
+
+(* Lemma P3_3_prelim1 : forall x y, Myulp x < Myulp y -> Myulp x <= / (bpow beta 1) * Myulp y. *)
+(* intros x0 y0 Hxy. *)
+(* SearchAbout Myulp. *)
+(* destruct (P3_2_implicit_1 x0 y0 Hxy) as [k H]. *)
+(* destruct (Req_dec x0 0). rewrite H0. rewrite ulp0. *)
+(* apply Rmult_le_pos. *)
+(* apply Rlt_le. *)
+(* apply Rinv_0_lt_compat; apply bpow_gt_0. *)
+(* destruct (Req_dec y0 0). *)
+(* rewrite H1. rewrite ulp0; lra. *)
+(* apply Rlt_le. *)
+(* apply ulpgt0; lra. *)
+(* destruct (Req_dec y0 0). *)
+(* rewrite H1,ulp0 in Hxy. *)
+(* assert (0 < Myulp x0) by (apply ulpgt0; lra). *)
+(* lra. *)
+(* rewrite !ulpn0; try lra. *)
+(* lazy beta delta [ulp canonic_exp fexp FLX_exp ]. *)
+(* destruct H. *)
+(* Admitted. *)
+
+(* second version, easier to manipulate *)
+Lemma P3_3_prelim1 : forall x y, Myulp x < Myulp y -> Myulp x * (bpow beta 1) <=  Myulp y.
+Admitted.
+
+
+(* Two lemmas from the paper on Kahan and 2*2 determinant. Maybe it can be plugged with another student's work?  *)
+Lemma OtherPaper_2_2 : ~ (format (b*d)) -> ~ format (a*c - Round(b * d)) -> (a*b*c*d) <> 0 /\ a * c - b * d <> 0.
+Proof.
+Admitted.
+
+
+Lemma OtherPaper_3_1 : ~ (format (b*d)) -> ~ format (a*c - Round(b * d)) -> Rabs (Round (b*d) - b*d) <= (bpow beta 1 - 1) * Rabs (a * c - b * d).
+Admitted.
+
+Lemma OtherPaper_5_5 : (Myulp (b*d) <= Myulp (R)) -> Rabs (Round (a*c - Round (b*d)) - (a * c - Round (b * d))) <= / 2 * Myulp R.
+Admitted.
+
+Lemma ulp_le_ulp : forall x y, Rabs x <= bpow beta 1 * Rabs y -> Myulp x <= bpow beta 1 *  Myulp y.
+Admitted. 
 
 Lemma P3_3 : 0 <= (a*b*c*d) -> Rabs (a*c) < / 2 * Rabs (b*d) -> Rabs (R1 - R) <= u * Rabs (R) + u * Rabs (b * d). 
 Proof.
@@ -473,9 +514,76 @@ destruct (Rle_dec (Myulp ff) (Myulp R)).
 apply (Rle_trans _ (/ 2 * Myulp ff + u * Rabs (b * d)) _ ).
 apply Rplus_le_compat.
 apply form2_1.
+rewrite <-Rabs_Ropp. 
+rewrite Ropp_minus_distr.
 apply form2_3.
-SearchAbout (/ 2 * Myulp _).
-SearchAbout ({ _ } + { _ }) (generic_format).
+apply Rplus_le_compat; try lra.
+apply (Rle_trans _ (/ 2 * Myulp R)); try lra.
+apply form2_2.
+assert  (HNbd : ~ format (b * d)). intro Hbd.
+apply (H (generic_format_FLX beta p (b*d) Hbd)).
+assert  (HNacbd : ~ format (a * c - Round (b * d))). intro Hacbd.
+apply (H0 (generic_format_FLX beta p (_) Hacbd)).
+assert (HoP := (OtherPaper_3_1 HNbd HNacbd)).
+set (e := Round (b * d) - b * d).
+assert (HR : ff = R + (- e)).
+unfold R,ff,e; simpl; ring.
+assert (Hint5 : Rabs ff <= bpow beta 1 * Rabs R).
+replace (bpow _ _ * _) with (Rabs R + (bpow beta 1 - 1)* Rabs R); try ring.
+rewrite HR.
+apply (Rle_trans _ (Rabs(R) + (Rabs e)) _).
+replace (Rabs e) with (Rabs (-e)); try apply Rabs_Ropp.
+apply Rabs_triang.
+apply Rplus_le_compat; try lra.
+unfold e,R; simpl.
+apply OtherPaper_3_1; try exact HNbd; try exact HNacbd.
+
+assert (Hint6 : Myulp ff <= bpow beta 1 * Myulp R).
+apply ulp_le_ulp;  lra.
+assert (Hint7 : Myulp R * bpow beta 1 <= Myulp ff ).
+apply P3_3_prelim1; lra. SearchAbout (_ <= _) (_ = _).
+assert (Hint8 : Myulp R * bpow beta 1 = Myulp ff ).
+lra.
+
+destruct (Rle_dec (Myulp (b*d)) (Myulp R)) as [ubdlR | Rltubd].
+assert (Hint9 := OtherPaper_5_5 ubdlR).
+apply Rplus_le_compat.
+apply (Rle_trans _ (/ 2 * Myulp R) _); unfold ff; try lra.
+apply form2_2.
+replace (b * d - Round (b * d)) with (-(Round (b * d) - b*d)).
+rewrite Rabs_Ropp.
+apply form2_3.
+ring.
+
+assert (Hint10 : Myulp (b*d) = bpow beta 1 * Myulp R).
+assert (Hint11 : Myulp R * bpow beta 1 <= Myulp (b*d)).
+apply P3_3_prelim1; lra.
+assert (Hint12 : Myulp (b*d) <= bpow beta 1 * Myulp R).
+apply ulp_le_ulp.
+apply (Rle_trans _ (2 * Rabs R) _).
+apply (Rle_trans _ (2 * (Rabs (b * d) - Rabs (a * c))) _).
+lra.
+apply Rmult_le_compat; try lra.
+assert (Hint13 : 0 <= Rabs (b * d)) by apply Rabs_pos.
+lra.
+unfold R; simpl.
+replace (a*c - b*d) with (-(b*d - a*c)); try ring.
+rewrite Rabs_Ropp.
+apply Rabs_triang_inv.
+apply Rmult_le_compat; try lra; try apply Rabs_pos. 
+SearchAbout (_ <= _)%Z (_ <= _).
+replace 2 with (Z2R 2); try (simpl;  lra).
+apply Z2R_le; rewrite Zpower_pos_nat; unfold Pos.to_nat; simpl.
+rewrite Zpower_nat_succ_r.  rewrite Zpower_nat_0_r. 
+rewrite Z.mul_1_r.
+apply Hbeta.
+lra.
+(* "we are left with dealing with the case" ulp(bd) = ulp(f) = beta ulp(R) in the article*)
+
+(* x = R = ad - bc *)
+(*FRONT*)
+
+
 
 (*       assert ( Hint2 : Rabs (bpow beta k - i1) = Rabs i1 - bpow beta k). *)
      
