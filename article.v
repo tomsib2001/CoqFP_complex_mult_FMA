@@ -31,6 +31,62 @@ Open Scope R_scope.
 
 Hypothesis RoundNeg : forall x, Round (-x) = -Round x.
 
+
+Lemma ValFexp : Valid_exp fexp.
+Proof.
+apply FLX_exp_valid.
+exact Hpgt0.
+Qed.
+
+Lemma ValidRound :  Valid_rnd (Znearest choice).
+apply valid_rnd_N.
+Qed.
+
+Lemma RoundNPT : forall x, Rnd_N_pt (FLX_format beta p) x (Round x).
+intros x0.
+unfold Rnd_N_pt.
+split.
+apply FLX_format_generic.
+exact Hpgt0.
+(* apply round_generic. *)
+
+apply generic_format_round.
+apply ValFexp.
+apply ValidRound.
+intros g.
+intros Fg.
+apply round_N_pt.
+apply ValFexp.
+apply generic_format_FLX.
+auto.
+Qed.
+
+Lemma roundStable : forall x, format x -> Round x = x.
+Proof.
+intros x0 fx0.
+apply round_generic. apply ValidRound.
+apply generic_format_FLX; auto.
+Qed.
+
+
+Lemma formBeta : forall k, format (bpow beta k).
+intros k.
+apply FLX_format_generic. 
+exact Hpgt0.
+apply generic_format_bpow.
+unfold FLX_exp.
+assert (0 < p)%Z by exact Hpgt0.
+psatzl Z.
+Qed.
+
+Lemma upos : 0 <= u.
+Proof.
+unfold u.
+SearchAbout (0 <= _ * _)%R.
+apply Rmult_le_pos; try lra.
+apply (Rlt_le _ _ (bpow_gt_0 beta (_))).
+Qed.
+
 Lemma ulp0 : Myulp 0 = 0.
 unfold Myulp.
 destruct (Req_EM_T 0 0); lra.
@@ -43,14 +99,21 @@ unfold Myulp.
 destruct (Req_EM_T x 0); lra.
 Qed.
 
+Lemma ulpgt0 : forall x, x <> 0 -> 0 < Myulp x. 
+Proof.
+intros x Hxgt0.
+rewrite ulpn0; try lra.
+lazy beta delta [ulp canonic_exp FLX_exp ] in *.
+apply bpow_gt_0.
+Qed.
+
+
 Lemma form2_1 : forall x : R, Rabs (Round x - x) <= / 2 * Myulp x.
 Proof.
 intros x.
 unfold Round, ulp.
 (* SearchAbout ulp. *)
-assert (VE : Valid_exp fexp).
-apply FLX_exp_valid.
-exact Hpgt0.
+assert (VE : Valid_exp fexp) by apply ValFexp.
 unfold Myulp.
 destruct (Req_dec x 0).
   rewrite H.
@@ -232,8 +295,43 @@ Qed.
 
 Lemma P3_2_implicit_1 : forall x y, Myulp(x) < Myulp(y) -> exists k, Rabs x < bpow beta k <= Rabs y.
 intros x y Hulps.
-admit.
+destruct (Req_dec x 0).
+rewrite H. rewrite Rabs_R0.
+set (r := ln_beta beta y).
+destruct (Req_dec y 0).
+rewrite H,H0 in Hulps; lra.
+destruct r as [r h2]; simpl.
+exists (r-1)%Z. 
+split.
+apply bpow_gt_0.
+lra.
+destruct (Req_dec y 0).
+rewrite H0 in Hulps. rewrite ulp0 in Hulps.
+assert (Hcontr : Myulp x > 0).
+exact (ulpgt0 x H).
+lra.
+(* now x and y <> 0, serious stuff begins *)
+rewrite !ulpn0 in Hulps; try lra.
+lazy beta delta [ulp canonic_exp FLX_exp ] in Hulps.
+assert (HulpsMod : bpow beta ( (ln_beta beta x)) <
+          bpow beta ( (ln_beta beta y))).
+unfold fexp,FLX_exp in Hulps. 
+replace (ln_beta beta x - p)%Z with (ln_beta beta x + (- p))%Z in Hulps; try ring.
+replace (ln_beta beta y - p)%Z with (ln_beta beta y + (- p))%Z in Hulps; try ring.
+rewrite !bpow_plus in Hulps.
+apply (Rmult_lt_reg_r (bpow beta (-p)) _); try apply bpow_gt_0; lra.
+exists (ln_beta beta x).
+split.
+apply  bpow_ln_beta_gt.
+apply Rnot_gt_le.
+intros  Habs.
+assert ( Hy : (ln_beta beta y <= ln_beta beta x)%Z).
+apply ln_beta_le_bpow; try lra.
+(* SearchAbout (bpow _ _ < bpow _ _). *)
+assert (Habs1 := (bpow_le beta (ln_beta beta y) (ln_beta beta x) Hy)).
+lra.
 Qed.
+
 
 Lemma P3_2_Rabs : forall x y, (x*y)>= 0 -> Rabs (x + y) = Rabs x + Rabs y.
 Proof.
@@ -287,15 +385,16 @@ apply Rplus_le_compat.
       replace (Round i1) with (- Round (-i1)); try apply RoundNeg.
       apply (Rle_trans _ (Rabs (- i1 - bpow beta k)) _).
       replace (-Round (-i1) - i1) with (- i1 - Round(-i1)); try ring.
-      assert (Rnd_N_pt (FLX_format beta p)  (-i1) (Round (-i1))).      
-      admit. (* needs its own lemma, but obvious *)
+      assert (Rnd_N_pt (FLX_format beta p)  (-i1) (Round (-i1))). 
+      apply RoundNPT.
       destruct H as [H H0].
       replace (- i1 - Round (- i1)) with (-(Round (- i1) - - i1)); try ring.
       rewrite Rabs_Ropp.
       replace (- i1 - bpow beta k) with (-((bpow beta k) - (- i1))); try ring.
       rewrite Rabs_Ropp.
       apply (H0 (bpow beta k)).
-      admit. (* needs its own lemma, but obvious *)
+      SearchAbout FLX_format.
+      apply formBeta.
       replace (-i1) with (Rabs i1).
       assert (Hpos : 0 <= Rabs i1 - bpow beta k) by lra.
       rewrite (Rabs_pos_eq ); try lra.
@@ -308,13 +407,11 @@ apply Rplus_le_compat.
       try lra.
       rewrite Rabsi1.
             assert (Rnd_N_pt (FLX_format beta p)  i1 (Round i1)).
-      split.
-      admit.
-      admit.
+      apply RoundNPT.
       destruct H as [Fri1 RNEDef].
       apply (Rle_trans _ (Rabs (bpow beta k - i1)) _).
       apply (RNEDef).
-      admit.
+      apply formBeta.
       replace (bpow beta k - i1) with (-(i1 - bpow beta k)); try lra.
       rewrite Rabs_Ropp.
       rewrite Rabs_pos_eq; try lra.
@@ -328,7 +425,7 @@ apply Rplus_le_compat.
       assert (Hint7 : Rabs (Round i1 - i1) <= u * Rabs (b * c)) by lra.
       apply (Rle_trans _ (u * Rabs (b * c)) _); try lra.
       apply Rmult_le_compat; try apply Rabs_pos; try lra.
-      admit (* needs a lemma *).
+      exact upos.
       unfold I; simpl. rewrite P3_2_Rabs; try lra.
       Check Rplus_le_compat_l.
       rewrite <-Rplus_0_l at 1.
@@ -338,6 +435,47 @@ Qed.
       (* FRONT *)      
 
 
+Lemma P3_3 : 0 <= (a*b*c*d) -> Rabs (a*c) < / 2 * Rabs (b*d) -> Rabs (R1 - R) <= u * Rabs (R) + u * Rabs (b * d). 
+Proof.
+intros Habcd H1.
+set (ff := a*c - Round(b*d)).
+(* Definition C b d ff := (~ (format (b*d))) /\ (~ (format ff)). *)
+assert (Hfexp := ValFexp).
+destruct (generic_format_EM beta fexp  (b*d)).
+assert (Hint1 : Rabs(R1 - R)  <= u * Rabs R).
+  unfold R1,R,r1; simpl.
+rewrite (roundStable (b*d)); try apply FLX_format_generic; try apply Hpgt0; try auto.
+apply form2_3.
+apply (Rle_trans _ (u * Rabs R) _); try auto.
+assert (Hint2 : 0 <= u * Rabs (b * d)).
+apply Rmult_le_pos; try exact upos; try apply Rabs_pos.
+lra.
+destruct (generic_format_EM beta fexp ff).
+assert (Hint3 : Rabs(R1 - R)  <= u * Rabs (b * d)).
+unfold R1,R,r1; simpl.
+rewrite (roundStable (_ * _ - _)); try apply FLX_format_generic; try apply Hpgt0; try auto.
+replace (a * c - Round (b * d) - (a * c - b * d)) with (-(Round(b*d) - (b * d))); try ring.
+rewrite Rabs_Ropp.
+apply form2_3.
+apply (Rle_trans _ (u * Rabs (b*d)) _); try lra.
+assert (0 <= u * Rabs R).
+apply Rmult_le_pos; try exact upos; try apply Rabs_pos.
+lra.
+(* In the paper : "we assume that (C) holds" *)
+
+assert (Hint4 : R1 - R = (Round ff - ff) + (b*d - Round (b*d) )).
+unfold R1,R,r1,ff;simpl. ring.
+apply (Rle_trans _ (Rabs (Round ff - ff) + Rabs (b*d - Round (b*d))) _).
+rewrite Hint4.
+apply Rabs_triang.
+(* Now in the special case when ulp(f) <= ulp(R): *)
+destruct (Rle_dec (Myulp ff) (Myulp R)).
+apply (Rle_trans _ (/ 2 * Myulp ff + u * Rabs (b * d)) _ ).
+apply Rplus_le_compat.
+apply form2_1.
+apply form2_3.
+SearchAbout (/ 2 * Myulp _).
+SearchAbout ({ _ } + { _ }) (generic_format).
 
 (*       assert ( Hint2 : Rabs (bpow beta k - i1) = Rabs i1 - bpow beta k). *)
      
