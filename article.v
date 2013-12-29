@@ -22,11 +22,14 @@ Hypothesis Hpgt0 : (0 < p)%Z.
 Print FLX_exp.
 Definition fexp := FLX_exp p.
 Notation format := (FLX_format beta p). (* a predicate saying that the argument is an FLX floating point number *)
+Notation Round_P := (Rnd_NE_pt beta fexp).
 Variable choice : Z -> bool. (* since the article does not depend on the choice function, we keep it as a parameter *)
 Definition Round := round beta fexp (Znearest choice).  (* the rounding function *)
 Definition Myulp (x : R) := if Req_EM_T x 0 then 0%R else (ulp beta fexp x) .
 Definition u := (/ 2 * (bpow beta (- p + 1)))%R.
 Open Scope R_scope.
+
+Hypothesis RoundNeg : forall x, Round (-x) = -Round x.
 
 Lemma ulp0 : Myulp 0 = 0.
 unfold Myulp.
@@ -126,9 +129,10 @@ Definition I1 := Round(i1).
 Definition z1 := R1 +i I1.
 
 
-Lemma P3_1 : Rabs (R1 - R) <= u * (Rabs R) + u * Rabs (b*d) + u^2 * Rabs (b*d).
+Lemma P3_1_R : Rabs (R1 - R) <= u * (Rabs R) + u * Rabs (b*d) + u^2 * Rabs (b*d).
 Proof.
 destruct (relative_error_N_FLX_ex beta p Hpgt0 choice (b*d)) as [eps1 [heps1 heqeps1]].
+(* unfold R1,R; simpl. *)
 destruct (relative_error_N_FLX_ex beta p Hpgt0 choice ((a * c - b * d * (1 + eps1)))) as [eps2 [heps2 heqeps2]].
 
 assert (HR1 : (R1 = (a * c - b * d * (1 + eps1)) * (1 + eps2))%R).
@@ -165,6 +169,47 @@ assert (HR1 : (R1 = (a * c - b * d * (1 + eps1)) * (1 + eps2))%R).
   lra.
 Qed.
 
+Lemma P3_1_I : Rabs (I1 - I) <= u * (Rabs I) + u * Rabs (b*c) + u^2 * Rabs (b*c).
+Proof.
+destruct (relative_error_N_FLX_ex beta p Hpgt0 choice (b*c)) as [eps1 [heps1 heqeps1]].
+(* unfold I,I1; simpl. *)
+destruct (relative_error_N_FLX_ex beta p Hpgt0 choice ((a * d + b * c * (1 + eps1)))) as [eps2 [heps2 heqeps2]].
+assert (HI1 : (I1 = (a * d + b * c * (1 + eps1)) * (1 + eps2))%R).
+  unfold I1,i1.
+   replace (Round(b*c)) with  (b * c * (1 + eps1)).
+   replace (Round (a*d + _*_*_)) with ((a * d + b * c * (1 + eps1)) * (1 + eps2)).
+   lra.
+
+rewrite HI1. unfold I.
+replace (Cim z) with (a*d + b*c); try auto.
+assert (Heqint1 :(a * d + b * c * (1 + eps1)) * (1 + eps2) - (a * d + b * c) =  I * eps2 + b * c * eps1  + b * c * eps1 * eps2) by (unfold I; simpl; ring).
+rewrite Heqint1.
+rewrite !Rplus_assoc.
+set (u1 := I * _).
+set (u2 := b*c*eps1).
+set (u3 := u2*_).
+apply (Rle_trans _ (Rabs u1 + Rabs (u2 +  u3)) _ ).
+apply Rabs_triang.
+apply Rplus_le_compat.
+unfold u1. rewrite Rmult_comm.
+rewrite Rabs_mult.
+apply Rmult_le_compat; try apply Rabs_pos; try lra; try exact heps2.
+unfold I; simpl;lra.
+apply (Rle_trans _ (Rabs (u2) + Rabs  u3) _ ).
+apply Rabs_triang.
+apply Rplus_le_compat.
+unfold u2; rewrite Rmult_comm.
+rewrite Rabs_mult.
+apply Rmult_le_compat; try apply Rabs_pos; try lra; try exact heps1.
+unfold u3,u2.
+rewrite Rmult_assoc; rewrite Rmult_comm.
+rewrite !Rabs_mult.
+rewrite <-!Rmult_assoc.
+replace (u^2) with (u*u); try ring.
+repeat apply Rmult_le_compat; repeat (try rewrite <-!Rabs_mult; apply Rabs_pos); try unfold u; try lra.
+Qed.
+
+
 (* Lemma P3_2_prelim : Myulp i1 <= Myulp I. *)
 (* Proof. *)
 (* (* this proof seems difficult. We need to know that if ulp(y) < ulp(x), there exists k such that |y| < beta^k <= |g| *) *)
@@ -185,33 +230,137 @@ Qed.
 (* admit. *)
 (* Qed. *)
 
+Lemma P3_2_implicit_1 : forall x y, Myulp(x) < Myulp(y) -> exists k, Rabs x < bpow beta k <= Rabs y.
+intros x y Hulps.
+admit.
+Qed.
+
+Lemma P3_2_Rabs : forall x y, (x*y)>= 0 -> Rabs (x + y) = Rabs x + Rabs y.
+Proof.
+intros x0 y0 Hxy.
+destruct (Req_dec x0 0) as [Hx0 | Hxn0].
+rewrite Hx0; rewrite Rplus_0_l; rewrite Rabs_R0;rewrite Rplus_0_l; lra.
+destruct (Req_dec y0 0) as [Hy0 | Hyn0].
+rewrite Hy0; rewrite Rplus_0_r; rewrite Rabs_R0;rewrite Rplus_0_r; lra.
+destruct (Rle_dec x0 0).
+destruct (Rle_dec y0 0).
+(* x0, y0 < 0*)
+replace (x0 + y0) with (-(-x0 -y0)); try lra.
+rewrite Rabs_Ropp.
+rewrite Rabs_pos_eq; try lra.
+replace (Rabs x0) with (-x0); rewrite <-Rabs_Ropp; rewrite Rabs_pos_eq; lra.
+(* x0 < 0, y0 > 0 *)
+assert ( 0 > (x0 * y0)). SearchAbout ( _ < 0).
+replace 0 with (x0 * 0); try ring.
+apply (Rmult_lt_gt_compat_neg_l x0 0 y0); try lra.
+lra.
+destruct (Rle_dec y0 0).
+(* x0 > 0, y0 < 0 *)
+assert ( 0 > (y0 * x0)).
+replace 0 with (y0 * 0); try ring.
+apply (Rmult_lt_gt_compat_neg_l y0 0 x0); try lra.
+lra.
+(* x0 > 0, y0 > 0 *)
+rewrite !Rabs_pos_eq; lra.
+Qed.
+
 Lemma P3_2 : (0 <= (a*b*c*d)) -> Rabs (I1 - I) <= u * Rabs I + u * Rabs (b*c).
 intros Habcd.
-destruct (Req_dec I 0) as [I0 | Ineq0].
-  rewrite I0. replace (I1 - 0) with I1. rewrite Rabs_R0.
-  unfold I1,i1. unfold I in I0; simpl in I0.
-replace (u * 0) with 0.
-rewrite Rplus_0_l.
-replace (a * d + Round (b * c)) with (Round (b * c) - b * c).
-apply form2_3.
-
-SearchAbout (0 + _)
-Check form2_3.
-
-
 assert (fact1 : (I1 - I) =  (Round (i1) - i1) + (Round (b*c) - b*c)).
 unfold I1,i1,I. simpl; ring.
 rewrite fact1.
 apply (Rle_trans _ (Rabs (Round (i1) - i1) + Rabs (Round (b*c) - b*c)) _).
 apply Rabs_triang.
 apply Rplus_le_compat.
+  destruct  (Rle_dec (Myulp i1) (Myulp I)).
+      (* case when ulp(i1) <= ulp(I) *)
   apply (Rle_trans _ (/ 2 * Myulp(i1)) _). 
     apply form2_1.
-      destruct  (Rle_dec (Myulp i1) (Myulp I)).
+
       apply (Rle_trans _ (/ 2 * Myulp I) _). lra.
       apply form2_2.
+      (* case when ulp(i1) > ulp(I) *)
+      destruct (P3_2_implicit_1 I i1) as [k Hencadr]; try lra.
+      assert (Hint2 : Rabs(Round(i1) - i1) <= Rabs i1 - bpow beta k).
+      destruct (Rle_dec i1 0).
+      (* case when i1 is >= 0 *)
+      replace (Round i1) with (- Round (-i1)); try apply RoundNeg.
+      apply (Rle_trans _ (Rabs (- i1 - bpow beta k)) _).
+      replace (-Round (-i1) - i1) with (- i1 - Round(-i1)); try ring.
+      assert (Rnd_N_pt (FLX_format beta p)  (-i1) (Round (-i1))).      
+      admit. (* needs its own lemma, but obvious *)
+      destruct H as [H H0].
+      replace (- i1 - Round (- i1)) with (-(Round (- i1) - - i1)); try ring.
+      rewrite Rabs_Ropp.
+      replace (- i1 - bpow beta k) with (-((bpow beta k) - (- i1))); try ring.
+      rewrite Rabs_Ropp.
+      apply (H0 (bpow beta k)).
+      admit. (* needs its own lemma, but obvious *)
+      replace (-i1) with (Rabs i1).
+      assert (Hpos : 0 <= Rabs i1 - bpow beta k) by lra.
+      rewrite (Rabs_pos_eq ); try lra.
+      apply Rabs_left1; lra.
+      rewrite RoundNeg; lra.
+      
+      (*case when i1 is >0 *)
+      assert (Rabsi1 : Rabs i1 = i1). try apply Rabs_pos_eq; try lra .
+      assert (Hge : bpow beta k <= i1).
+      try lra.
+      rewrite Rabsi1.
+            assert (Rnd_N_pt (FLX_format beta p)  i1 (Round i1)).
+      split.
+      admit.
+      admit.
+      destruct H as [Fri1 RNEDef].
+      apply (Rle_trans _ (Rabs (bpow beta k - i1)) _).
+      apply (RNEDef).
+      admit.
+      replace (bpow beta k - i1) with (-(i1 - bpow beta k)); try lra.
+      rewrite Rabs_Ropp.
+      rewrite Rabs_pos_eq; try lra.
+      assert (Hint3 : Rabs i1 - bpow beta k < Rabs i1 - Rabs I). lra. 
+      assert (Hint4 : Rabs i1 - Rabs I <= Rabs (i1 - I)).
+      apply Rabs_triang_inv.
+      assert (Hint5 : (i1 - I) = Round (b*c) - b*c). 
+        unfold i1,I; simpl; ring.
+      assert (Hint6 : Rabs (i1 - I) <= u * Rabs (b*c)).
+      rewrite Hint5. apply form2_3.
+      assert (Hint7 : Rabs (Round i1 - i1) <= u * Rabs (b * c)) by lra.
+      apply (Rle_trans _ (u * Rabs (b * c)) _); try lra.
+      apply Rmult_le_compat; try apply Rabs_pos; try lra.
+      admit (* needs a lemma *).
+      unfold I; simpl. rewrite P3_2_Rabs; try lra.
+      Check Rplus_le_compat_l.
+      rewrite <-Rplus_0_l at 1.
+      apply Rplus_le_compat_r; try apply Rabs_pos.
       apply form2_3.
 Qed.
+      (* FRONT *)      
+
+
+
+(*       assert ( Hint2 : Rabs (bpow beta k - i1) = Rabs i1 - bpow beta k). *)
+     
+(*       Check Rabs_pos_eq. *)
+(*       replace (bpow beta k - i1) with (-(i1 - bpow beta k)); try ring. *)
+(*       rewrite Rabs_Ropp. *)
+
+(*       rewrite <-(Rabs_pos_eq (Rabs (i1 - bpow beta k))); try apply Rabs_pos. *)
+(*       rewrite Rabs_pos_eq. *)
+(*       replace (Rabs i1) with i1. *)
+(*       ring. *)
+(*       rewrite Rabs_pos_eq; try lra. *)
+(*       apply (Rle_trans _ (bpow beta k) _). *)
+(*       apply (Rlt_le _ _ (bpow_gt_0 beta (_))); lra. *)
+(*       assert (bpow_gt_0 beta k). *)
+(*       SearchAbout Rabs (- _). *)
+(*       SearchAbout (Rabs) (0 <= _). *)
+
+(* Check Round_P. *)
+
+(* apply round_NE_pt. *)
+(*       apply form2_3. *)
+(* Qed. *)
 
 
 
